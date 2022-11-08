@@ -696,10 +696,12 @@ class InstantPowerGraph extends HTMLElement {
     constructor() {
         super();
         this.value       = this.defaults().value;
+        this.valueHr     = this.defaults().valueHr;
         this.metricValue = this.defaults().metricValue;
         this.scaleFactor = this.defaults().scaleFactor;
         this.barsCount   = this.defaults().barsCount;
         this.scaleMax    = this.setScaleMax();
+        this.firstPlot   = this.defaults().firstPlot;
         this.model       = {};
         this.postInit();
     }
@@ -711,9 +713,11 @@ class InstantPowerGraph extends HTMLElement {
     defaults () {
         return {
             value:       0,
+            valueHr:     0,
             barsCount:   0,
             metricValue: 200,
             scaleFactor: 1.6,
+            firstPlot:   true,
         };
     }
     connectedCallback() {
@@ -723,7 +727,7 @@ class InstantPowerGraph extends HTMLElement {
 
         this.graphWidth = this.calcGraphWidth();
 
-        xf.sub(`db:${this.prop}`, this.onUpdate.bind(this), this.signal);
+        xf.reg(`db:${this.prop}`, this.onUpdate.bind(this), this.signal);
         xf.sub(`db:${this.metric}`, this.onMetric.bind(this), this.signal);
     }
     disconnectedCallback() {
@@ -732,8 +736,9 @@ class InstantPowerGraph extends HTMLElement {
     calcGraphWidth() {
         return this.getBoundingClientRect().width;
     }
-    onUpdate(value) {
-        this.value = value;
+    onUpdate(db) {
+        this.value = db.power;
+        this.valueHr = db.heartRate;
         this.render();
     }
     onMetric(value) {
@@ -743,19 +748,36 @@ class InstantPowerGraph extends HTMLElement {
     setScaleMax() {
         this.scaleMax = this.metricValue * this.scaleFactor;
     }
-    bar(zone = 'one', height = 80, width = 1) {
-        return `<div class="graph-bar zone-${zone}" style="height: ${height}%; width: ${width}px;"></div>`;
+    bar(zone = 'one', height = 80, width = 1, heightHr = 0) {
+        var hrOffset = -4;
+        var widthCorrection = -hrOffset -1;
+        
+        var firstShift = ``;
+        if(this.firstPlot){
+            this.firstPlot = false;
+            firstShift = `<div style="height: 0%; width: ${width}px; margin-left:${hrOffset}px;"></div>`;
+        }
+
+        var powerPlot = `<div class="graph-bar zone-${zone}" style="height: ${height}%; width: ${width}px; margin-left:${widthCorrection}px;"></div>`;
+
+        var hrPlot = `<div style="height: 0%; width: ${width}px; margin-left:${hrOffset}px;"></div>`;
+        if(this.valueHr) {
+            hrPlot = `<div style="color:red; height: ${heightHr}%; width: ${width}px; margin-left:${hrOffset}px; font-size:2rem; font-weight:bold; text-alignment:right; text-shadow: 2px 0px 0px rgba(0,0,0,1.0), 2px 2px 0px rgba(0,0,0,1.0), 2px -2px 0px rgba(0,0,0,1.0);">.</div>`;
+        }
+        return firstShift + powerPlot + hrPlot
     }
     shift() {
-        this.removeChild(this.childNodes[0]);
+        this.removeChild(this.childNodes[0]); // heart rate/correction
+        this.removeChild(this.childNodes[0]); // power bar
     }
     render() {
         const zone = models.ftp.powerToZone(this.value, this.metricValue).name;
         const barHeight = scale(this.value, this.scaleMax);
+        const hrHeight = 25+scale(this.valueHr, 220);
         if(this.barsCount >= this.graphWidth) {
             this.shift();
         }
-        this.insertAdjacentHTML('beforeend', this.bar(zone, barHeight, 1));
+        this.insertAdjacentHTML('beforeend', this.bar(zone, barHeight, 1, hrHeight));
         this.barsCount += 1;
     }
 }
